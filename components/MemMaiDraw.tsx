@@ -12,9 +12,11 @@ type Props = {
   height?: Size;
   preserveAspectRatio?: string;
 
+  stageSelector?: string;
   bgSelector?: string;
   hazeSelector?: string;
   bloomSelector?: string;
+  lightSelector?: string;
 
   bgOpacity?: number;
   bgScale?: number;
@@ -41,10 +43,60 @@ type Props = {
   bloomRevealDuration?: number;
   bloomBreathDuration?: number;
   bloomOpacity?: number;
+
+  light?: boolean;
+  lightRevealDuration?: number;
+  lightOpacity?: number;
+  lightDuration?: number;
+
+  floatText?: boolean;
+  floatDistancePx?: number;
+  floatDuration?: number;
+
+  fireworks?: boolean;
+  fireworksRateMs?: number;
+  fireworksParticles?: number;
+
+  fetchTimeoutMs?: number;
 };
 
 const toCssSize = (v?: Size): string | undefined =>
   v === undefined || v === null ? undefined : typeof v === "number" ? `${v}px` : v;
+
+async function fetchTextWithTimeout(url: string, timeoutMs: number) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+    if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
+    return await res.text();
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+type Particle = {
+  x0: number;
+  y0: number;
+  x: number;
+  y: number;
+
+  vx: number;
+  vy: number;
+  g: number;
+
+  life: number;
+  t: number;
+
+  r: number;
+  a: number;
+
+  hue: number;
+  tw?: gsap.core.Tween;
+};
+
+const rand = (a: number, b: number) => a + Math.random() * (b - a);
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export default function MemMaiDraw({
   src = "/mem_mai_josefin.svg",
@@ -53,9 +105,11 @@ export default function MemMaiDraw({
   height,
   preserveAspectRatio = "xMidYMid meet",
 
-  bgSelector = ".mm-bg",
+  stageSelector = ".mm-stage-root",
+  bgSelector = ".mm-bgImg",
   hazeSelector = ".mm-haze",
   bloomSelector = ".mm-bloom",
+  lightSelector = ".mm-light",
 
   bgOpacity = 1,
   bgScale = 1,
@@ -82,43 +136,69 @@ export default function MemMaiDraw({
   bloomRevealDuration = 2.2,
   bloomBreathDuration = 3.8,
   bloomOpacity = 0.55,
+
+  light = true,
+  lightRevealDuration = 1.8,
+  lightOpacity = 0.55,
+  lightDuration = 10.5,
+
+  floatText = true,
+  floatDistancePx = 32,
+  floatDuration = 1.6, // nhanh hơn, giữ biên độ
+
+  fireworks = true,
+  fireworksRateMs = 900,
+  fireworksParticles = 60,
+
+  fetchTimeoutMs = 12000,
 }: Props) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const svgHostRef = useRef<HTMLDivElement | null>(null);
+  const fwCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const [svgMarkup, setSvgMarkup] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const svgStyle = useMemo(() => {
     const w = toCssSize(width);
     const h = toCssSize(height);
     const style: React.CSSProperties = {};
-
     if (w) style.width = w;
     if (h) style.height = h;
     if (w && !h) style.height = "auto";
     if (h && !w) style.width = "auto";
-
     return style;
   }, [width, height]);
 
   useEffect(() => {
     let cancelled = false;
+    setError(null);
+    setSvgMarkup("");
 
     (async () => {
-      const res = await fetch(src, { cache: "force-cache" });
-      const text = await res.text();
-      if (!cancelled) setSvgMarkup(text);
+      try {
+        const text = await fetchTextWithTimeout(src, fetchTimeoutMs);
+        if (!cancelled) setSvgMarkup(text);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to load SVG");
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [src]);
+  }, [src, fetchTimeoutMs]);
 
   useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !svgMarkup) return;
+    const wrap = wrapRef.current;
+    const svgHost = svgHostRef.current;
+    if (!wrap || !svgHost || !svgMarkup) return;
 
     const ctx = gsap.context(() => {
-      const svg = root.querySelector("svg");
+      // inject svg
+      svgHost.innerHTML = svgMarkup;
+
+      const svg = svgHost.querySelector("svg");
       if (!svg) return;
 
       svg.classList.add("mm-svg");
@@ -127,7 +207,7 @@ export default function MemMaiDraw({
       svg.setAttribute("preserveAspectRatio", preserveAspectRatio);
 
       Object.entries(svgStyle).forEach(([k, v]) => {
-        // @ts-expect-error style index
+        // @ts-expect-error
         svg.style[k] = v as any;
       });
 
@@ -148,6 +228,16 @@ export default function MemMaiDraw({
         }
       }
 
+      gsap.set(wrap, {
+        x: 0,
+        y: 0,
+        rotate: 0,
+        scale: 1,
+        transformOrigin: "50% 50%",
+        force3D: true,
+        willChange: "transform",
+      });
+
       gsap.set(group, { transformOrigin: "50% 50%" });
 
       paths.forEach((p) => {
@@ -161,36 +251,260 @@ export default function MemMaiDraw({
         p.style.vectorEffect = "non-scaling-stroke";
       });
 
-      const bg = document.querySelector<HTMLElement>(bgSelector) ?? null;
-      const hazeEl = document.querySelector<HTMLElement>(hazeSelector) ?? null;
-      const bloomEl = document.querySelector<HTMLElement>(bloomSelector) ?? null;
+      const stage =
+        wrap.closest<HTMLElement>(stageSelector) ?? document.querySelector<HTMLElement>(stageSelector);
+
+      const bg = stage?.querySelector<HTMLElement>(bgSelector) ?? null;
+      const hazeEl = stage?.querySelector<HTMLElement>(hazeSelector) ?? null;
+      const bloomEl = stage?.querySelector<HTMLElement>(bloomSelector) ?? null;
+      const lightEl = stage?.querySelector<HTMLElement>(lightSelector) ?? null;
 
       if (bg) {
-        gsap.set(bg, { opacity: 0, scale: 1.1, filter: "blur(12px)" });
+        gsap.set(bg, { opacity: 0, scale: 1.12, filter: "blur(12px)" });
         if (parallax) gsap.set(bg, { backgroundPosition: parallaxFrom });
       }
+      if (hazeEl) gsap.set(hazeEl, { opacity: 0, xPercent: -hazeXPercent });
+      if (bloomEl) gsap.set(bloomEl, { opacity: 0, scale: 1.03 });
+      if (lightEl) gsap.set(lightEl, { opacity: 0, xPercent: -18, yPercent: 6, rotate: -8, scale: 1.05 });
+      if (glow) gsap.set(svg, { filter: glowShadowFrom });
 
-      if (hazeEl) {
-        gsap.set(hazeEl, { opacity: 0, xPercent: -hazeXPercent });
-      }
+      // ===== Fireworks system =====
+      const canvas = fwCanvasRef.current;
+      const particles: Particle[] = [];
+      let rafing = false;
+      let fireTimer: number | null = null;
 
-      if (bloomEl) {
-        gsap.set(bloomEl, { opacity: 0, scale: 1.02 });
-      }
+      const resizeCanvas = () => {
+        if (!canvas) return;
+        const host = stage ?? wrap;
+        const rect = host.getBoundingClientRect();
+        const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+        canvas.style.width = `${rect.width}px`;
+        canvas.style.height = `${rect.height}px`;
+        const ctx2d = canvas.getContext("2d");
+        if (ctx2d) ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
 
-      if (glow) {
-        gsap.set(svg, { filter: glowShadowFrom });
-      }
+      const draw = () => {
+        if (!canvas) return;
+        const ctx2d = canvas.getContext("2d");
+        if (!ctx2d) return;
 
-      const tl = gsap.timeline({ defaults: { ease: "power2.out" } });
+        const w = canvas.clientWidth;
+        const h = canvas.clientHeight;
 
-      tl.fromTo(group, { scale: 1.25 }, { scale: 1, duration: 2.4, ease: "power3.out" }, 0);
-      tl.to(paths, { strokeDashoffset: 0, duration: 2.2, stagger: 0.12, ease: "power2.out" }, 0);
-      tl.to(paths, { fillOpacity: 1, duration: 1.2, stagger: 0.08, ease: "power2.out" }, 1.2);
-      tl.to(paths, { strokeOpacity: 0, duration: 1.2, stagger: 0.08, ease: "power2.out" }, 1.2);
+        ctx2d.clearRect(0, 0, w, h);
 
+        for (let i = particles.length - 1; i >= 0; i--) {
+          const p = particles[i];
+
+          // advance "physics" from tween time p.t
+          const t = p.t;
+          p.x = p.x0 + p.vx * t;
+          p.y = p.y0 + p.vy * t + 0.5 * p.g * t * t;
+
+          p.a = clamp(1 - t / p.life, 0, 1);
+
+          ctx2d.beginPath();
+          ctx2d.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.a})`;
+          ctx2d.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx2d.fill();
+
+          if (t >= p.life) {
+            p.tw?.kill();
+            particles.splice(i, 1);
+          }
+        }
+
+        if (particles.length === 0 && rafing) {
+          rafing = false;
+        }
+      };
+
+      const tick = () => {
+        draw();
+      };
+
+      const ensureTicker = () => {
+        if (!rafing) {
+          rafing = true;
+        }
+      };
+
+      const spawnExplosion = (cx: number, cy: number) => {
+        const count = fireworksParticles;
+        const hueBase = rand(10, 55); // hơi vàng ấm giống vibe của bạn
+
+        for (let i = 0; i < count; i++) {
+          const angle = rand(0, Math.PI * 2);
+          const speed = rand(140, 520);
+          const g = rand(380, 920); // gravity
+
+          const p: Particle = {
+            x0: cx,
+            y0: cy,
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - rand(60, 220), // nhấc lên chút
+            g,
+            life: rand(0.9, 2.1),
+            t: 0,
+            r: rand(1.2, 2.6),
+            a: 1,
+            hue: hueBase + rand(-20, 20),
+          };
+
+          // giống “createExplosion()”: mỗi particle có tween life riêng, fade-out theo time :contentReference[oaicite:1]{index=1}
+          p.tw = gsap.to(p, {
+            t: p.life,
+            duration: p.life,
+            ease: "power1.out",
+            onUpdate: ensureTicker,
+          });
+
+          particles.push(p);
+        }
+      };
+
+      const startFireworks = () => {
+        if (!fireworks || !canvas) return;
+
+        resizeCanvas();
+        const host = stage ?? wrap;
+
+        const shoot = () => {
+          const rect = host.getBoundingClientRect();
+          const x = rand(rect.width * 0.15, rect.width * 0.85);
+          const y = rand(rect.height * 0.15, rect.height * 0.45);
+          spawnExplosion(x, y);
+        };
+
+        shoot();
+        fireTimer = window.setInterval(shoot, fireworksRateMs);
+        gsap.ticker.add(tick);
+      };
+
+      const stopFireworks = () => {
+        if (fireTimer) window.clearInterval(fireTimer);
+        fireTimer = null;
+
+        particles.forEach((p) => p.tw?.kill());
+        particles.length = 0;
+
+        gsap.ticker.remove(tick);
+
+        if (canvas) {
+          const ctx2d = canvas.getContext("2d");
+          if (ctx2d) ctx2d.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+        }
+      };
+
+      const onResize = () => resizeCanvas();
+
+      // ===== loops + float =====
+      const loops: gsap.core.Animation[] = [];
+      let floatLoop: gsap.core.Timeline | null = null;
+
+      const startFloat = () => {
+        if (!floatText) return;
+        floatLoop?.kill();
+        floatLoop = gsap.timeline({ repeat: -1, yoyo: true });
+        floatLoop.to(wrap, {
+          y: -floatDistancePx,
+          duration: floatDuration,
+          ease: "sine.inOut",
+          force3D: true,
+          overwrite: "auto",
+        });
+      };
+
+      const startLoops = () => {
+        if (bg && parallax) {
+          loops.push(
+            gsap.to(bg, {
+              backgroundPosition: parallaxTo,
+              duration: parallaxDuration,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+        }
+
+        if (haze && hazeEl) {
+          loops.push(
+            gsap.to(hazeEl, {
+              xPercent: hazeXPercent,
+              duration: hazeDuration,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+        }
+
+        if (bloom && bloomEl) {
+          loops.push(
+            gsap.to(bloomEl, {
+              opacity: bloomOpacity,
+              duration: bloomBreathDuration,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+        }
+
+        if (light && lightEl) {
+          loops.push(
+            gsap.to(lightEl, {
+              xPercent: 18,
+              yPercent: -6,
+              rotate: 6,
+              duration: lightDuration,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+          loops.push(
+            gsap.to(lightEl, {
+              scale: 1.12,
+              duration: lightDuration * 0.72,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+        }
+
+        if (glow) {
+          loops.push(
+            gsap.to(svg, {
+              filter: glowShadow,
+              duration: glowDuration,
+              ease: "sine.inOut",
+              repeat: -1,
+              yoyo: true,
+            })
+          );
+        }
+      };
+
+      // ===== REVEAL timeline (finite) =====
+      const revealTl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+      revealTl.fromTo(group, { scale: 1.25 }, { scale: 1, duration: 2.4, ease: "power3.out" }, 0);
+      revealTl.to(paths, { strokeDashoffset: 0, duration: 2.2, stagger: 0.12 }, 0);
+      revealTl.to(paths, { fillOpacity: 1, duration: 1.2, stagger: 0.08 }, 1.2);
+      revealTl.to(paths, { strokeOpacity: 0, duration: 1.2, stagger: 0.08 }, 1.2);
+
+      // bg tween: start float + fireworks right after bg done
       if (bg) {
-        tl.to(
+        revealTl.to(
           bg,
           {
             opacity: bgOpacity,
@@ -202,83 +516,35 @@ export default function MemMaiDraw({
           `+=${bgDelay}`
         );
 
-        if (parallax) {
-          tl.to(
-            bg,
-            {
-              backgroundPosition: parallaxTo,
-              duration: parallaxDuration,
-              ease: "sine.inOut",
-              repeat: -1,
-              yoyo: true,
-            },
-            "<"
-          );
-        }
+        revealTl.add(() => {
+          startFloat();
+          startFireworks();
+          window.addEventListener("resize", onResize);
+        }, ">");
+      } else {
+        revealTl.add(() => {
+          startFloat();
+          startFireworks();
+          window.addEventListener("resize", onResize);
+        }, ">");
       }
 
-      if (haze && hazeEl) {
-        tl.to(
-          hazeEl,
-          {
-            opacity: hazeOpacity,
-            duration: 1.2,
-            ease: "power2.out",
-          },
-          "<"
-        );
+      if (haze && hazeEl) revealTl.to(hazeEl, { opacity: hazeOpacity, duration: 1.2 }, "<");
+      if (bloom && bloomEl) revealTl.to(bloomEl, { opacity: 1, duration: bloomRevealDuration }, "<");
+      if (light && lightEl) revealTl.to(lightEl, { opacity: lightOpacity, duration: lightRevealDuration }, "<");
 
-        tl.to(
-          hazeEl,
-          {
-            xPercent: hazeXPercent,
-            duration: hazeDuration,
-            ease: "sine.inOut",
-            repeat: -1,
-            yoyo: true,
-          },
-          "<"
-        );
-      }
+      revealTl.eventCallback("onComplete", startLoops);
 
-      if (bloom && bloomEl) {
-        tl.to(
-          bloomEl,
-          {
-            opacity: 1,
-            duration: bloomRevealDuration,
-            ease: "power2.out",
-          },
-          "<"
-        );
+      return () => {
+        window.removeEventListener("resize", onResize);
 
-        tl.to(
-          bloomEl,
-          {
-            opacity: bloomOpacity,
-            duration: bloomBreathDuration,
-            ease: "sine.inOut",
-            repeat: -1,
-            yoyo: true,
-          },
-          ">"
-        );
-      }
+        stopFireworks();
 
-      if (glow) {
-        tl.to(
-          svg,
-          {
-            filter: glowShadow,
-            duration: glowDuration,
-            ease: "sine.inOut",
-            repeat: -1,
-            yoyo: true,
-          },
-          "<"
-        );
-      }
-    }, root);
+        floatLoop?.kill();
+        loops.forEach((a) => a.kill());
+        revealTl.kill();
+      };
+    }, wrap);
 
     return () => ctx.revert();
   }, [
@@ -286,9 +552,11 @@ export default function MemMaiDraw({
     svgStyle,
     preserveAspectRatio,
 
+    stageSelector,
     bgSelector,
     hazeSelector,
     bloomSelector,
+    lightSelector,
 
     bgOpacity,
     bgScale,
@@ -315,13 +583,35 @@ export default function MemMaiDraw({
     bloomRevealDuration,
     bloomBreathDuration,
     bloomOpacity,
+
+    light,
+    lightRevealDuration,
+    lightOpacity,
+    lightDuration,
+
+    floatText,
+    floatDistancePx,
+    floatDuration,
+
+    fireworks,
+    fireworksRateMs,
+    fireworksParticles,
   ]);
 
+  if (error) {
+    return (
+      <div className={["mm-wrap", className].filter(Boolean).join(" ")}>
+        <div style={{ opacity: 0.9 }}>
+          Failed to load SVG: <span style={{ opacity: 0.8 }}>{error}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      ref={rootRef}
-      className={["mm-wrap", className].filter(Boolean).join(" ")}
-      dangerouslySetInnerHTML={{ __html: svgMarkup }}
-    />
+    <div ref={wrapRef} className={["mm-wrap", className].filter(Boolean).join(" ")}>
+      <canvas ref={fwCanvasRef} className="mm-fireworks" />
+      <div ref={svgHostRef} className="mm-svgHost" />
+    </div>
   );
 }
