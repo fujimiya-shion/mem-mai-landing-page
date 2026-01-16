@@ -1,32 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import SheepIntroLottie from "@/components/SheepIntroLottie";
 import MemMaiDraw from "@/components/MemMaiDraw";
-import SheepIntro from "@/components/SheepIntro";
 
 export default function Page() {
-    const [introDone, setIntroDone] = useState(false);
-    const [drawDone, setDrawDone] = useState(false);
+    const [showIntro, setShowIntro] = useState(true);
+    const [bgOn, setBgOn] = useState(false);
+
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setShowIntro(false);
+            setBgOn(true); // sau intro thì bật bg mem-mai
+        }, 3000);
+
+        return () => clearTimeout(t);
+    }, []);
 
     return (
-        <div className="mm-stage-root">
-            {/* BG luôn tồn tại nhưng ẩn tới khi drawDone */}
-            <div className={["mm-bg", drawDone ? "is-on" : ""].join(" ")}>
+        <div
+            className={[
+                "mm-stage-root",
+                showIntro ? "is-intro" : "is-main",
+            ].join(" ")}
+        >
+            {/* background chính */}
+            <div className={["mm-bg", bgOn ? "is-on" : ""].join(" ")}>
                 <div className="mm-bgImg" />
                 <div className="mm-bgOverlay" />
             </div>
 
-            {!introDone && (
-                <SheepIntro durationMs={3000} count={12} onDone={() => setIntroDone(true)} />
-            )}
+            {showIntro && <SheepIntroLottie maxSizeVw={40} maxSizeVh={40} />}
 
             <div className="mm-content">
-                {introDone && (
-                    <MemMaiDraw
-                        animateBg={false}
-                        onDrawComplete={() => setDrawDone(true)}
-                    />
-                )}
+                {!showIntro && <MemMaiDraw />}
             </div>
         </div>
     );
