@@ -26,10 +26,17 @@ body {
 }
 
 /* ===== PURE BACKGROUND (NO OVERLAY) ===== */
-.mm-bg {
+.mm-bg{
   position: absolute;
   inset: 0;
   z-index: 0;
+
+  opacity: 0;
+  transition: opacity 900ms ease;
+}
+
+.mm-bg.is-on{
+  opacity: 1;
 }
 
 .mm-bgImg {
@@ -92,4 +99,29 @@ body {
   stroke-linecap: round;
   stroke-linejoin: round;
   paint-order: stroke;
+}
+
+/* ===== SHEEP INTRO ===== */
+.mm-sheepIntro{
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: #18152d;
+
+  opacity: 0;
+}
+
+
+.mm-sheep{
+  position: absolute;
+  left: 50%;
+  width: clamp(120px, 16vw, 260px);
+  will-change: transform, opacity;
+}
+
+.mm-sheep svg{
+  width: 100%;
+  height: auto;
+  display: block;
 }
