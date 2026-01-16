@@ -26,41 +26,77 @@ body {
   transition: background-color 700ms ease;
 }
 
-.mm-stage-root.is-intro{
+.mm-stage-root.is-intro {
   background: #fff;
 }
 
-.mm-stage-root.is-main{
+.mm-stage-root.is-main {
   background: var(--mm-bg);
 }
 
-/* ===== PURE BACKGROUND (NO OVERLAY) ===== */
-.mm-bg{
+/* ===== BACKGROUND (CROSSFADE LIGHT/DARK, NO FLASH) ===== */
+.mm-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
-
   opacity: 0;
   transition: opacity 900ms ease;
 }
 
-.mm-bg.is-on{
+.mm-bg.is-on {
   opacity: 1;
 }
 
+/* container for bg layers */
 .mm-bgImg {
   position: absolute;
   inset: 0;
-  background: url("/bg-mem-mai.png") center / cover no-repeat;
-  
+  z-index: 1;
 }
 
-.mm-bgOverlay {
-  width: 100%;
-  height: 100%;
+/* 2 layers for smooth crossfade */
+.mm-bgImg::before,
+.mm-bgImg::after {
+  content: "";
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.16); /* << CHỈNH Ở ĐÂY */
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity 1600ms ease, transform 1600ms ease;
+  will-change: opacity, transform;
+}
+
+/* LIGHT */
+.mm-bg.is-light .mm-bgImg::before {
+  background-image: url("/bg-mem-mai.png");
+  opacity: 1;
+  transform: scale(1);
+}
+
+.mm-bg.is-light .mm-bgImg::after {
+  opacity: 0;
+}
+
+/* DARK */
+.mm-bg.is-dark .mm-bgImg::after {
+  background-image: url("/bg-mem-mai-dark.png");
+  opacity: 1;
+  transform: scale(1);
+}
+
+.mm-bg.is-dark .mm-bgImg::before {
+  opacity: 0;
+}
+
+/* overlay stays consistent */
+.mm-bgOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.16);
 }
 
 /* ===== CONTENT CENTER ===== */
@@ -111,89 +147,141 @@ body {
 }
 
 /* ===== SHEEP INTRO ===== */
-.mm-sheepIntro{
+.mm-sheepIntro {
   position: absolute;
   inset: 0;
   z-index: 40;
   pointer-events: none;
   background: #18152d;
-  opacity: 0; /* GSAP sẽ set autoAlpha=1 */
+  opacity: 0; /* GSAP will set autoAlpha=1 */
 }
 
-.mm-sheep{
+.mm-sheep {
   position: absolute;
   left: 50%;
   width: clamp(140px, 18vw, 300px);
   will-change: transform, opacity;
-  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.20));
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.20));
 }
 
-.mm-sheep svg{
+.mm-sheep svg {
   width: 100%;
   height: auto;
   display: block;
 }
 
-.mm-sheepLottie{
-  position:absolute;
-  inset:0;
-  z-index:45;
-  display:grid;
-  place-items:center;
-  pointer-events:none;
-  overflow:hidden;
-
-  /* ✅ nền trắng / trong suốt */
-  background: #FFF; /* hoặc #fff nếu muốn phủ trắng */
+.mm-sheepLottie {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  overflow: hidden;
+  background: #fff;
   transition: opacity 450ms ease;
   opacity: 1;
 }
 
-.mm-sheepLottie.is-out{
+.mm-sheepLottie.is-out {
   opacity: 0;
 }
 
-.mm-sheepLottieInner{
+.mm-sheepLottieInner {
   width: clamp(260px, 60vw, 820px);
   height: clamp(260px, 60vh, 820px);
-  display:grid;
-  place-items:center;
+  display: grid;
+  place-items: center;
 }
 
-.mm-sheepLottieViewport{
+.mm-sheepLottieViewport {
   width: 100%;
   height: 100%;
   transform-origin: 50% 50%;
 }
 
-.mm-decor{
-  position:absolute;
-  inset:0;
-  z-index:46;
-  pointer-events:none;
-  display:grid;
-  place-items:center;
+.mm-decor {
+  position: absolute;
+  inset: 0;
+  z-index: 46;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
 }
 
-.mm-ringWrap{
-  display:grid;
-  place-items:center;
+.mm-ringWrap {
+  display: grid;
+  place-items: center;
   gap: 12px;
   transform: translateY(10vh);
 }
 
-.mm-loadingText{
+.mm-loadingText {
   font-size: 14px;
   letter-spacing: 0.08em;
   opacity: 0.85;
 }
 
-.mm-spark{
-  position:absolute;
+.mm-spark {
+  position: absolute;
   width: 4px;
   height: 4px;
   border-radius: 999px;
   background: rgba(255, 220, 160, 0.7);
   filter: blur(0.2px);
   opacity: 0.35;
+}
+
+.mm-themeCover{
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity 360ms ease, transform 520ms ease;
+}
+
+.mm-themeCover.is-on{
+  opacity: 1;
+  transform: scale(1);
+}
+
+.mm-themeCoverShade{
+  position:absolute;
+  inset:0;
+  background: radial-gradient(1200px 700px at 50% 55%,
+    rgba(0,0,0,0.55),
+    rgba(0,0,0,0.92)
+  );
+  backdrop-filter: blur(10px);
+}
+
+.mm-themeCoverVignette{
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(closest-side at 50% 55%,
+      rgba(255,255,255,0.06),
+      rgba(0,0,0,0.0) 45%,
+      rgba(0,0,0,0.55) 100%
+    );
+  opacity: 0.9;
+  mix-blend-mode: overlay;
+}
+
+.mm-themeCoverCenter{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  gap: 10px;
+  transform: translateY(6px);
+}
+
+.mm-themeCoverText{
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.85;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Lottie from "lottie-react";
-import sheepAnim from "@/public/sheep_lottie.json";
+import toggleAnim from "@/public/toggle_lottie.json";
 
 type Props = {
     maxSizeVw?: number;
@@ -12,26 +12,31 @@ type Props = {
     zoom?: number;
 };
 
-export default function SheepIntroLottie({
-    maxSizeVw = 70,
-    maxSizeVh = 70,
+export default function ToggleLottie({
+    maxSizeVw = 40,
+    maxSizeVh = 40,
     nudgeX = 0,
-    nudgeY = -100,
+    nudgeY = 0,
     zoom = 1.08,
 }: Props) {
     return (
-        <div className="mm-sheepLottie">
+        <div className="mm-toggleLottie">
             <div
-                className="mm-sheepLottieInner"
+                className="mm-toggleLottieInner"
                 style={{ width: `${maxSizeVw}vw`, height: `${maxSizeVh}vh` }}
             >
                 <div
-                    className="mm-sheepLottieViewport"
+                    className="mm-toggleLottieViewport"
                     style={{
                         transform: `translate(${nudgeX}px, ${nudgeY}px) scale(${zoom})`,
                     }}
                 >
-                    <Lottie animationData={sheepAnim} loop autoplay style={{ width: "100%", height: "100%" }} />
+                    <Lottie
+                        animationData={toggleAnim}
+                        loop
+                        autoplay
+                        style={{ width: "100%", height: "100%" }}
+                    />
                 </div>
             </div>
         </div>
