@@ -52,7 +52,7 @@ export default function Page() {
             {drawDone && (
                 <ThemeCinematicToggle
                     intervalMs={15000}
-                    coverMs={1200}
+                    coverMs={2000}
                     swapAtMs={520}
                     preloadImages={["/bg-mem-mai.png", "/bg-mem-mai-dark.png"]}
                 />

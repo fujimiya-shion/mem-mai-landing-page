@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useTheme } from "next-themes";
 import SheepIntroLottie from "@/components/SheepIntroLottie";
+import DayNightIntroLottie from "./DayNightIntroLottie";
 
 export default function ThemeCinematicToggle({
     intervalMs = 10000,
@@ -104,9 +105,8 @@ export default function ThemeCinematicToggle({
         <div className={`mm-themeCover ${coverOn ? "is-on" : ""}`}>
             <div className="mm-themeCoverShade" />
             <div className="mm-themeCoverVignette" />
-            <div className="mm-themeCoverCenter">
-                <SheepIntroLottie maxSizeVw={isMobile ? 40 : 20} maxSizeVh={isMobile ? 40 : 20} />
-                <div className="mm-themeCoverText">Switching vibe…</div>
+            <div className="mm-themeCoverCenter bg-white">
+                <DayNightIntroLottie maxSizeVw={isMobile ? 40 : 20} maxSizeVh={isMobile ? 40 : 20} />
             </div>
         </div>
     );
