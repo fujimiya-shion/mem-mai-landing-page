@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import SheepIntroLottie from "@/components/SheepIntroLottie";
 import MemMaiDraw from "@/components/MemMaiDraw";
 import ThemeCinematicToggle from "@/components/ThemeCinematicToggle";
+import FireworksLayer from "@/components/FireworksLayer";
 
 export default function Page() {
     const { theme } = useTheme();
@@ -12,7 +13,6 @@ export default function Page() {
     const [mounted, setMounted] = useState(false);
     const [showIntro, setShowIntro] = useState(true);
     const [bgOn, setBgOn] = useState(false);
-
     const [drawDone, setDrawDone] = useState(false);
 
     useEffect(() => setMounted(true), []);
@@ -27,9 +27,21 @@ export default function Page() {
 
     if (!mounted) return null;
 
+    const isDark = theme === "dark";
+
     return (
         <div className={["mm-stage-root", showIntro ? "is-intro" : "is-main"].join(" ")}>
-            {/* chỉ bắt đầu đếm 10s sau khi MemMaiDraw vẽ xong */}
+            {/* Fireworks layer: full màn, transparent, chỉ bật khi dark */}
+            {!showIntro && drawDone && (
+                <FireworksLayer
+                    enabled={isDark}
+                    zIndex={15}
+                    rateMs={900}
+                    particles={60}
+                />
+            )}
+
+            {/* chỉ bắt đầu đếm sau khi MemMaiDraw vẽ xong */}
             {drawDone && (
                 <ThemeCinematicToggle
                     intervalMs={15000}
@@ -39,13 +51,7 @@ export default function Page() {
                 />
             )}
 
-            <div
-                className={[
-                    "mm-bg",
-                    bgOn ? "is-on" : "",
-                    theme === "dark" ? "is-dark" : "is-light",
-                ].join(" ")}
-            >
+            <div className={["mm-bg", bgOn ? "is-on" : "", isDark ? "is-dark" : "is-light"].join(" ")}>
                 <div className="mm-bgImg" />
                 <div className="mm-bgOverlay" />
             </div>
@@ -55,7 +61,6 @@ export default function Page() {
             <div className="mm-content">
                 {!showIntro && (
                     <MemMaiDraw
-                        isFireworksEnable={theme === 'dark'}
                         animateBg
                         onDrawComplete={() => setDrawDone(true)}
                     />

@@ -115,12 +115,13 @@ body {
   width: min(1400px, 92vw);
 }
 
-.mm-fireworks {
-  position: absolute;
+.mm-fireworksLayer {
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 20;
+  background: transparent;
 }
+
 
 .mm-svgHost {
   position: relative;
