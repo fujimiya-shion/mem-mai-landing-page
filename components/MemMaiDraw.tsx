@@ -96,6 +96,15 @@ type Particle = {
     tw?: gsap.core.Tween;
 };
 
+type Rocket = {
+    x: number;
+    y: number;
+    targetY: number;
+    hue: number;
+    trail: Array<{ x: number; y: number; a: number }>;
+    tw?: gsap.core.Tween;
+};
+
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -197,7 +206,8 @@ export default function MemMaiDraw({
     useEffect(() => {
         const wrap = wrapRef.current;
         const svgHost = svgHostRef.current;
-        if (!wrap || !svgHost || !svgMarkup) return;
+        const canvas = fwCanvasRef.current;
+        if (!wrap || !svgHost || !svgMarkup || !canvas) return;
 
         const ctx = gsap.context(() => {
             svgHost.innerHTML = svgMarkup;
@@ -252,9 +262,9 @@ export default function MemMaiDraw({
             const bloomEl = stage?.querySelector<HTMLElement>(bloomSelector) ?? null;
             const lightEl = stage?.querySelector<HTMLElement>(lightSelector) ?? null;
 
-            // ===== Fireworks system =====
-            const canvas = fwCanvasRef.current;
+            // ===== Fireworks system với ROCKET =====
             const particles: Particle[] = [];
+            const rockets: Rocket[] = [];
             let rafing = false;
             let fireTimer: number | null = null;
 
@@ -269,8 +279,9 @@ export default function MemMaiDraw({
 
             const resizeCanvas = () => {
                 if (!canvas) return;
-                const host = stage ?? wrap;
-                const rect = host.getBoundingClientRect();
+                const rect = window.innerWidth && window.innerHeight
+                    ? { width: window.innerWidth, height: window.innerHeight }
+                    : document.documentElement.getBoundingClientRect();
                 const dpr = clamp(window.devicePixelRatio || 1, 1, 2);
                 canvas.width = Math.round(rect.width * dpr);
                 canvas.height = Math.round(rect.height * dpr);
@@ -290,6 +301,67 @@ export default function MemMaiDraw({
 
                 ctx2d.clearRect(0, 0, w, h);
 
+                // Vẽ rockets
+                for (let i = rockets.length - 1; i >= 0; i--) {
+                    const r = rockets[i];
+
+                    // Vẽ trail
+                    for (let j = 0; j < r.trail.length; j++) {
+                        const trail = r.trail[j];
+                        const size = 2.5 - (j / r.trail.length) * 1.8;
+
+                        ctx2d.save();
+                        ctx2d.globalAlpha = trail.a * 0.85;
+
+                        // Glow cho trail
+                        const trailGlow = ctx2d.createRadialGradient(trail.x, trail.y, 0, trail.x, trail.y, size * 2);
+                        trailGlow.addColorStop(0, `hsla(${r.hue}, 95%, 75%, ${trail.a})`);
+                        trailGlow.addColorStop(0.5, `hsla(${r.hue}, 90%, 65%, ${trail.a * 0.5})`);
+                        trailGlow.addColorStop(1, `hsla(${r.hue}, 85%, 55%, 0)`);
+
+                        ctx2d.fillStyle = trailGlow;
+                        ctx2d.beginPath();
+                        ctx2d.arc(trail.x, trail.y, size * 2, 0, Math.PI * 2);
+                        ctx2d.fill();
+
+                        // Core
+                        ctx2d.fillStyle = `hsla(${r.hue}, 100%, 85%, ${trail.a})`;
+                        ctx2d.beginPath();
+                        ctx2d.arc(trail.x, trail.y, size, 0, Math.PI * 2);
+                        ctx2d.fill();
+                        ctx2d.restore();
+                    }
+
+                    // Vẽ rocket head với glow mạnh hơn
+                    ctx2d.save();
+
+                    // Outer glow
+                    const outerGlow = ctx2d.createRadialGradient(r.x, r.y, 0, r.x, r.y, 12);
+                    outerGlow.addColorStop(0, `hsla(${r.hue}, 100%, 95%, 0.9)`);
+                    outerGlow.addColorStop(0.3, `hsla(${r.hue}, 100%, 80%, 0.6)`);
+                    outerGlow.addColorStop(0.6, `hsla(${r.hue}, 95%, 70%, 0.3)`);
+                    outerGlow.addColorStop(1, `hsla(${r.hue}, 90%, 60%, 0)`);
+
+                    ctx2d.fillStyle = outerGlow;
+                    ctx2d.beginPath();
+                    ctx2d.arc(r.x, r.y, 12, 0, Math.PI * 2);
+                    ctx2d.fill();
+
+                    // Inner bright core
+                    const innerGlow = ctx2d.createRadialGradient(r.x, r.y, 0, r.x, r.y, 5);
+                    innerGlow.addColorStop(0, `hsla(${r.hue}, 100%, 98%, 1)`);
+                    innerGlow.addColorStop(0.5, `hsla(${r.hue}, 100%, 85%, 0.9)`);
+                    innerGlow.addColorStop(1, `hsla(${r.hue}, 100%, 75%, 0.5)`);
+
+                    ctx2d.fillStyle = innerGlow;
+                    ctx2d.beginPath();
+                    ctx2d.arc(r.x, r.y, 5, 0, Math.PI * 2);
+                    ctx2d.fill();
+
+                    ctx2d.restore();
+                }
+
+                // Vẽ particles
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const p = particles[i];
 
@@ -325,7 +397,7 @@ export default function MemMaiDraw({
                     }
                 }
 
-                if (particles.length === 0 && rafing) {
+                if (particles.length === 0 && rockets.length === 0 && rafing) {
                     rafing = false;
                 }
             };
@@ -340,14 +412,16 @@ export default function MemMaiDraw({
                 }
             };
 
-            const spawnExplosion = (cx: number, cy: number) => {
+            const spawnExplosion = (cx: number, cy: number, rocketHue: number) => {
                 const count = fireworksParticles;
-                const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
+                const palette = colorPalettes.find(p =>
+                    rocketHue >= p.hue[0] && rocketHue <= p.hue[1]
+                ) || colorPalettes[0];
 
                 for (let i = 0; i < count; i++) {
                     const angle = rand(0, Math.PI * 2);
-                    const speed = rand(200, 650);
-                    const g = rand(300, 700);
+                    const speed = rand(220, 700);
+                    const g = rand(250, 650);
 
                     const p: Particle = {
                         x0: cx,
@@ -355,11 +429,11 @@ export default function MemMaiDraw({
                         x: cx,
                         y: cy,
                         vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed - rand(150, 350),
+                        vy: Math.sin(angle) * speed - rand(100, 300),
                         g,
-                        life: rand(1.2, 2.8),
+                        life: rand(1.4, 3.2),
                         t: 0,
-                        r: rand(1.5, 3.2),
+                        r: rand(1.8, 3.8),
                         a: 1,
                         hue: rand(palette.hue[0], palette.hue[1]),
                         sat: rand(palette.sat[0], palette.sat[1]),
@@ -377,17 +451,63 @@ export default function MemMaiDraw({
                 }
             };
 
+            const launchRocket = (startX: number, startY: number, targetY: number) => {
+                const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
+                const hue = rand(palette.hue[0], palette.hue[1]);
+
+                const rocket: Rocket = {
+                    x: startX,
+                    y: startY,
+                    targetY: targetY,
+                    hue: hue,
+                    trail: [],
+                };
+
+                const duration = rand(0.7, 1.1);
+
+                rocket.tw = gsap.to(rocket, {
+                    y: targetY,
+                    duration: duration,
+                    ease: "power2.out",
+                    onUpdate: () => {
+                        // Cập nhật trail
+                        rocket.trail.unshift({ x: rocket.x, y: rocket.y, a: 1 });
+                        if (rocket.trail.length > 20) rocket.trail.pop();
+
+                        // Fade trail
+                        rocket.trail.forEach((t, i) => {
+                            t.a = 1 - (i / rocket.trail.length);
+                        });
+
+                        ensureTicker();
+                    },
+                    onComplete: () => {
+                        // Nổ khi tới đích
+                        spawnExplosion(rocket.x, rocket.y, rocket.hue);
+
+                        // Xóa rocket
+                        const idx = rockets.indexOf(rocket);
+                        if (idx > -1) rockets.splice(idx, 1);
+                    },
+                });
+
+                rockets.push(rocket);
+                ensureTicker();
+            };
+
             const startFireworks = () => {
                 if (!fireworks || !isFireworksEnable || !canvas) return;
 
                 resizeCanvas();
-                const host = stage ?? wrap;
 
                 const shoot = () => {
-                    const rect = host.getBoundingClientRect();
-                    const x = rand(rect.width * 0.2, rect.width * 0.8);
-                    const y = rand(rect.height * 0.1, rect.height * 0.35);
-                    spawnExplosion(x, y);
+                    const w = window.innerWidth;
+                    const h = window.innerHeight;
+                    const startX = rand(w * 0.25, w * 0.75);
+                    const startY = h; // Bắt đầu từ đáy màn hình
+                    const targetY = rand(h * 0.15, h * 0.35); // Nổ ở 15-35% chiều cao
+
+                    launchRocket(startX, startY, targetY);
                 };
 
                 shoot();
@@ -401,6 +521,9 @@ export default function MemMaiDraw({
 
                 particles.forEach((p) => p.tw?.kill());
                 particles.length = 0;
+
+                rockets.forEach((r) => r.tw?.kill());
+                rockets.length = 0;
 
                 gsap.ticker.remove(tick);
 
@@ -658,7 +781,6 @@ export default function MemMaiDraw({
         animateBg,
         onDrawComplete,
     ]);
-
     if (error) {
         return (
             <div className={["mm-wrap", className].filter(Boolean).join(" ")}>
@@ -671,7 +793,7 @@ export default function MemMaiDraw({
 
     return (
         <div ref={wrapRef} className={["mm-wrap", className].filter(Boolean).join(" ")}>
-            <canvas ref={fwCanvasRef} className="mm-fireworks" />
+            <canvas ref={fwCanvasRef} className="mm-fireworks" style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 15 }} />
             <div ref={svgHostRef} className="mm-svgHost" />
         </div>
     );

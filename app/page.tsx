@@ -32,7 +32,7 @@ export default function Page() {
             {/* chỉ bắt đầu đếm 10s sau khi MemMaiDraw vẽ xong */}
             {drawDone && (
                 <ThemeCinematicToggle
-                    intervalMs={10000}
+                    intervalMs={15000}
                     coverMs={1200}
                     swapAtMs={520}
                     preloadImages={["/bg-mem-mai.png", "/bg-mem-mai-dark.png"]}
