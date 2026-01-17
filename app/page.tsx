@@ -10,6 +10,8 @@ import ThemeCinematicToggle from "@/components/ThemeCinematicToggle";
 import FireworksLayer from "@/components/FireworksLayer";
 import SunRaysLayer from "@/components/SunRaysLayer";
 import SparkleDustLayer from "@/components/SparkleDustLayer";
+import SunHaloLayer from "@/components/SunHaloLayer";
+import CloudBandsLayer from "@/components/CloudBandsLayer";
 
 export default function Page() {
     const { theme } = useTheme();
@@ -42,6 +44,8 @@ export default function Page() {
                     <FireworksLayer enabled={isDark} zIndex={15} rateMs={900} particles={60} />
                     <SunRaysLayer enabled={isLight} zIndex={12} origin="top-left" />
                     <SparkleDustLayer enabled={isLight} zIndex={13} count={42} />
+                    <SunHaloLayer enabled={isLight} zIndex={11} />
+                    <CloudBandsLayer enabled={isLight} zIndex={14} />
                 </>
             )}
 
