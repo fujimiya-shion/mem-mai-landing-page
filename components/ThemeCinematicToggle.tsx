@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useTheme } from "next-themes";
 import SheepIntroLottie from "@/components/SheepIntroLottie";
 
@@ -9,8 +9,14 @@ export default function ThemeCinematicToggle({
     coverMs = 1200,
     swapAtMs = 520,
     preloadImages = ["/bg-mem-mai.png", "/bg-mem-mai-dark.png"],
+}: {
+    intervalMs?: number;
+    coverMs?: number;
+    swapAtMs?: number;
+    preloadImages?: string[];
 }) {
     const { theme, setTheme } = useTheme();
+
     const [mounted, setMounted] = useState(false);
     const [coverOn, setCoverOn] = useState(false);
     const [assetsReady, setAssetsReady] = useState(false);
@@ -19,12 +25,17 @@ export default function ThemeCinematicToggle({
     const busyRef = useRef(false);
     const timerRef = useRef<number | null>(null);
 
+    // ✅ giữ theme mới nhất để interval không bị stale
+    const themeRef = useRef<string | undefined>(theme);
+    useEffect(() => {
+        themeRef.current = theme;
+    }, [theme]);
+
     useEffect(() => {
         setMounted(true);
 
         const mq = window.matchMedia("(max-width: 768px)");
         const update = () => setIsMobile(mq.matches);
-
         update();
         mq.addEventListener("change", update);
         return () => mq.removeEventListener("change", update);
@@ -33,6 +44,7 @@ export default function ThemeCinematicToggle({
     useEffect(() => {
         if (!mounted) return;
         let cancelled = false;
+
         (async () => {
             await Promise.all(
                 preloadImages.map(
@@ -46,31 +58,37 @@ export default function ThemeCinematicToggle({
             );
             if (!cancelled) setAssetsReady(true);
         })();
+
         return () => {
             cancelled = true;
         };
     }, [mounted, preloadImages]);
 
-    const cinematicSwap = () => {
+    const cinematicSwap = useCallback(() => {
         if (!mounted || busyRef.current) return;
         busyRef.current = true;
 
         setCoverOn(true);
 
         window.setTimeout(() => {
-            setTheme((prev) => (prev === "light" ? "dark" : "light"));
+            const current = themeRef.current ?? "light";
+            const next = current === "light" ? "dark" : "light";
+            setTheme(next); // ✅ string
         }, swapAtMs);
 
         window.setTimeout(() => {
             setCoverOn(false);
             busyRef.current = false;
         }, coverMs);
-    };
+    }, [mounted, setTheme, swapAtMs, coverMs]);
 
     useEffect(() => {
         if (!mounted || !assetsReady) return;
 
-        if (!theme) setTheme("light");
+        // ✅ nếu theme chưa có (trong lúc hydrate), ép về light
+        if (!themeRef.current) {
+            setTheme("light");
+        }
 
         timerRef.current = window.setInterval(cinematicSwap, intervalMs);
 
@@ -78,7 +96,7 @@ export default function ThemeCinematicToggle({
             if (timerRef.current) clearInterval(timerRef.current);
             timerRef.current = null;
         };
-    }, [mounted, assetsReady]);
+    }, [mounted, assetsReady, intervalMs, cinematicSwap, setTheme]);
 
     if (!mounted) return null;
 
@@ -87,10 +105,7 @@ export default function ThemeCinematicToggle({
             <div className="mm-themeCoverShade" />
             <div className="mm-themeCoverVignette" />
             <div className="mm-themeCoverCenter">
-                <SheepIntroLottie
-                    maxSizeVw={isMobile ? 40 : 20}
-                    maxSizeVh={isMobile ? 40 : 20}
-                />
+                <SheepIntroLottie maxSizeVw={isMobile ? 40 : 20} maxSizeVh={isMobile ? 40 : 20} />
                 <div className="mm-themeCoverText">Switching vibe…</div>
             </div>
         </div>

@@ -50,7 +50,7 @@ export default function Page() {
                 <div className="mm-bgOverlay" />
             </div>
 
-            {showIntro && <SheepIntroLottie maxSizeVw={40} maxSizeVh={40} />}
+            {showIntro && <SheepIntroLottie maxSizeVw={20} maxSizeVh={20} />}
 
             <div className="mm-content">
                 {!showIntro && (
