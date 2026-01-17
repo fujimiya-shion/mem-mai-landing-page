@@ -2,10 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useTheme } from "next-themes";
+
 import SheepIntroLottie from "@/components/SheepIntroLottie";
 import MemMaiDraw from "@/components/MemMaiDraw";
 import ThemeCinematicToggle from "@/components/ThemeCinematicToggle";
+
 import FireworksLayer from "@/components/FireworksLayer";
+import SunRaysLayer from "@/components/SunRaysLayer";
+import SparkleDustLayer from "@/components/SparkleDustLayer";
 
 export default function Page() {
     const { theme } = useTheme();
@@ -22,26 +26,25 @@ export default function Page() {
             setShowIntro(false);
             setBgOn(true);
         }, 3000);
+
         return () => clearTimeout(t);
     }, []);
 
     if (!mounted) return null;
 
     const isDark = theme === "dark";
+    const isLight = theme === "light";
 
     return (
         <div className={["mm-stage-root", showIntro ? "is-intro" : "is-main"].join(" ")}>
-            {/* Fireworks layer: full màn, transparent, chỉ bật khi dark */}
             {!showIntro && drawDone && (
-                <FireworksLayer
-                    enabled={isDark}
-                    zIndex={15}
-                    rateMs={900}
-                    particles={60}
-                />
+                <>
+                    <FireworksLayer enabled={isDark} zIndex={15} rateMs={900} particles={60} />
+                    <SunRaysLayer enabled={isLight} zIndex={12} origin="top-left" />
+                    <SparkleDustLayer enabled={isLight} zIndex={13} count={42} />
+                </>
             )}
 
-            {/* chỉ bắt đầu đếm sau khi MemMaiDraw vẽ xong */}
             {drawDone && (
                 <ThemeCinematicToggle
                     intervalMs={15000}
@@ -59,12 +62,7 @@ export default function Page() {
             {showIntro && <SheepIntroLottie maxSizeVw={20} maxSizeVh={20} />}
 
             <div className="mm-content">
-                {!showIntro && (
-                    <MemMaiDraw
-                        animateBg
-                        onDrawComplete={() => setDrawDone(true)}
-                    />
-                )}
+                {!showIntro && <MemMaiDraw animateBg onDrawComplete={() => setDrawDone(true)} />}
             </div>
         </div>
     );
