@@ -54,13 +54,13 @@ type Props = {
     floatDuration?: number;
 
     fireworks?: boolean;
+    isFireworksEnable?: boolean;
     fireworksRateMs?: number;
     fireworksParticles?: number;
 
     fetchTimeoutMs?: number;
     animateBg?: boolean;
     onDrawComplete?: () => void;
-
 };
 
 const toCssSize = (v?: Size): string | undefined =>
@@ -83,18 +83,16 @@ type Particle = {
     y0: number;
     x: number;
     y: number;
-
     vx: number;
     vy: number;
     g: number;
-
     life: number;
     t: number;
-
     r: number;
     a: number;
-
     hue: number;
+    sat: number;
+    light: number;
     tw?: gsap.core.Tween;
 };
 
@@ -147,16 +145,16 @@ export default function MemMaiDraw({
 
     floatText = true,
     floatDistancePx = 32,
-    floatDuration = 1.6, // nhanh hơn, giữ biên độ
+    floatDuration = 1.6,
 
     fireworks = true,
+    isFireworksEnable = true,
     fireworksRateMs = 900,
     fireworksParticles = 60,
 
     fetchTimeoutMs = 12000,
     animateBg = true,
     onDrawComplete,
-
 }: Props) {
     const wrapRef = useRef<HTMLDivElement | null>(null);
     const svgHostRef = useRef<HTMLDivElement | null>(null);
@@ -164,6 +162,7 @@ export default function MemMaiDraw({
 
     const [svgMarkup, setSvgMarkup] = useState("");
     const [error, setError] = useState<string | null>(null);
+    const hasDrawnRef = useRef(false);
 
     const svgStyle = useMemo(() => {
         const w = toCssSize(width);
@@ -201,7 +200,6 @@ export default function MemMaiDraw({
         if (!wrap || !svgHost || !svgMarkup) return;
 
         const ctx = gsap.context(() => {
-            // inject svg
             svgHost.innerHTML = svgMarkup;
 
             const svg = svgHost.querySelector("svg");
@@ -246,17 +244,6 @@ export default function MemMaiDraw({
 
             gsap.set(group, { transformOrigin: "50% 50%" });
 
-            paths.forEach((p) => {
-                const len = p.getTotalLength();
-                p.style.strokeDasharray = `${len}`;
-                p.style.strokeDashoffset = `${len}`;
-                p.style.stroke = "rgba(245,245,245,0.95)";
-                p.style.fill = "rgba(245,245,245,0.95)";
-                (p.style as any).fillOpacity = "0";
-                (p.style as any).strokeOpacity = "1";
-                p.style.vectorEffect = "non-scaling-stroke";
-            });
-
             const stage =
                 wrap.closest<HTMLElement>(stageSelector) ?? document.querySelector<HTMLElement>(stageSelector);
 
@@ -265,20 +252,20 @@ export default function MemMaiDraw({
             const bloomEl = stage?.querySelector<HTMLElement>(bloomSelector) ?? null;
             const lightEl = stage?.querySelector<HTMLElement>(lightSelector) ?? null;
 
-            if (bg) {
-                gsap.set(bg, { opacity: 0, scale: 1.12, filter: "blur(12px)" });
-                if (parallax) gsap.set(bg, { backgroundPosition: parallaxFrom });
-            }
-            if (hazeEl) gsap.set(hazeEl, { opacity: 0, xPercent: -hazeXPercent });
-            if (bloomEl) gsap.set(bloomEl, { opacity: 0, scale: 1.03 });
-            if (lightEl) gsap.set(lightEl, { opacity: 0, xPercent: -18, yPercent: 6, rotate: -8, scale: 1.05 });
-            if (glow) gsap.set(svg, { filter: glowShadowFrom });
-
             // ===== Fireworks system =====
             const canvas = fwCanvasRef.current;
             const particles: Particle[] = [];
             let rafing = false;
             let fireTimer: number | null = null;
+
+            const colorPalettes = [
+                { hue: [10, 30], sat: [85, 100], light: [55, 75] },
+                { hue: [40, 60], sat: [90, 100], light: [60, 80] },
+                { hue: [320, 340], sat: [80, 95], light: [60, 75] },
+                { hue: [270, 290], sat: [70, 90], light: [55, 70] },
+                { hue: [180, 200], sat: [75, 95], light: [50, 70] },
+                { hue: [0, 15], sat: [95, 100], light: [55, 70] },
+            ];
 
             const resizeCanvas = () => {
                 if (!canvas) return;
@@ -306,17 +293,31 @@ export default function MemMaiDraw({
                 for (let i = particles.length - 1; i >= 0; i--) {
                     const p = particles[i];
 
-                    // advance "physics" from tween time p.t
                     const t = p.t;
                     p.x = p.x0 + p.vx * t;
                     p.y = p.y0 + p.vy * t + 0.5 * p.g * t * t;
 
                     p.a = clamp(1 - t / p.life, 0, 1);
 
+                    ctx2d.save();
+                    ctx2d.globalAlpha = p.a;
+
+                    const gradient = ctx2d.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+                    gradient.addColorStop(0, `hsla(${p.hue}, ${p.sat}%, ${p.light}%, ${p.a})`);
+                    gradient.addColorStop(0.4, `hsla(${p.hue}, ${p.sat}%, ${p.light}%, ${p.a * 0.5})`);
+                    gradient.addColorStop(1, `hsla(${p.hue}, ${p.sat}%, ${p.light}%, 0)`);
+
+                    ctx2d.fillStyle = gradient;
                     ctx2d.beginPath();
-                    ctx2d.fillStyle = `hsla(${p.hue}, 100%, 70%, ${p.a})`;
+                    ctx2d.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+                    ctx2d.fill();
+
+                    ctx2d.fillStyle = `hsla(${p.hue}, ${p.sat}%, ${Math.min(p.light + 20, 95)}%, ${p.a})`;
+                    ctx2d.beginPath();
                     ctx2d.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                     ctx2d.fill();
+
+                    ctx2d.restore();
 
                     if (t >= p.life) {
                         p.tw?.kill();
@@ -341,12 +342,12 @@ export default function MemMaiDraw({
 
             const spawnExplosion = (cx: number, cy: number) => {
                 const count = fireworksParticles;
-                const hueBase = rand(10, 55); // hơi vàng ấm giống vibe của bạn
+                const palette = colorPalettes[Math.floor(Math.random() * colorPalettes.length)];
 
                 for (let i = 0; i < count; i++) {
                     const angle = rand(0, Math.PI * 2);
-                    const speed = rand(140, 520);
-                    const g = rand(380, 920); // gravity
+                    const speed = rand(200, 650);
+                    const g = rand(300, 700);
 
                     const p: Particle = {
                         x0: cx,
@@ -354,16 +355,17 @@ export default function MemMaiDraw({
                         x: cx,
                         y: cy,
                         vx: Math.cos(angle) * speed,
-                        vy: Math.sin(angle) * speed - rand(60, 220), // nhấc lên chút
+                        vy: Math.sin(angle) * speed - rand(150, 350),
                         g,
-                        life: rand(0.9, 2.1),
+                        life: rand(1.2, 2.8),
                         t: 0,
-                        r: rand(1.2, 2.6),
+                        r: rand(1.5, 3.2),
                         a: 1,
-                        hue: hueBase + rand(-20, 20),
+                        hue: rand(palette.hue[0], palette.hue[1]),
+                        sat: rand(palette.sat[0], palette.sat[1]),
+                        light: rand(palette.light[0], palette.light[1]),
                     };
 
-                    // giống “createExplosion()”: mỗi particle có tween life riêng, fade-out theo time :contentReference[oaicite:1]{index=1}
                     p.tw = gsap.to(p, {
                         t: p.life,
                         duration: p.life,
@@ -376,15 +378,15 @@ export default function MemMaiDraw({
             };
 
             const startFireworks = () => {
-                if (!fireworks || !canvas) return;
+                if (!fireworks || !isFireworksEnable || !canvas) return;
 
                 resizeCanvas();
                 const host = stage ?? wrap;
 
                 const shoot = () => {
                     const rect = host.getBoundingClientRect();
-                    const x = rand(rect.width * 0.15, rect.width * 0.85);
-                    const y = rand(rect.height * 0.15, rect.height * 0.45);
+                    const x = rand(rect.width * 0.2, rect.width * 0.8);
+                    const y = rand(rect.height * 0.1, rect.height * 0.35);
                     spawnExplosion(x, y);
                 };
 
@@ -500,59 +502,114 @@ export default function MemMaiDraw({
                 }
             };
 
-            // ===== REVEAL timeline (finite) =====
-            const revealTl = gsap.timeline({ defaults: { ease: "power2.out" } });
+            // ===== CHỈ DRAW 1 LẦN DUY NHẤT =====
+            if (!hasDrawnRef.current) {
+                hasDrawnRef.current = true;
 
-            revealTl.fromTo(group, { scale: 1.25 }, { scale: 1, duration: 2.4, ease: "power3.out" }, 0);
-            revealTl.to(paths, { strokeDashoffset: 0, duration: 2.2, stagger: 0.12 }, 0);
-            revealTl.to(paths, { fillOpacity: 1, duration: 1.2, stagger: 0.08 }, 1.2);
-            revealTl.to(paths, { strokeOpacity: 0, duration: 1.2, stagger: 0.08 }, 1.2);
+                // Setup initial state cho draw animation
+                paths.forEach((p) => {
+                    const len = p.getTotalLength();
+                    p.style.strokeDasharray = `${len}`;
+                    p.style.strokeDashoffset = `${len}`;
+                    p.style.stroke = "rgba(245,245,245,0.95)";
+                    p.style.fill = "rgba(245,245,245,0.95)";
+                    (p.style as any).fillOpacity = "0";
+                    (p.style as any).strokeOpacity = "1";
+                    p.style.vectorEffect = "non-scaling-stroke";
+                });
 
-            // bg tween: start float + fireworks right after bg done
-            if (bg) {
-                revealTl.to(
-                    bg,
-                    {
+                if (bg) {
+                    gsap.set(bg, { opacity: 0, scale: 1.12, filter: "blur(12px)" });
+                    if (parallax) gsap.set(bg, { backgroundPosition: parallaxFrom });
+                }
+                if (hazeEl) gsap.set(hazeEl, { opacity: 0, xPercent: -hazeXPercent });
+                if (bloomEl) gsap.set(bloomEl, { opacity: 0, scale: 1.03 });
+                if (lightEl) gsap.set(lightEl, { opacity: 0, xPercent: -18, yPercent: 6, rotate: -8, scale: 1.05 });
+                if (glow) gsap.set(svg, { filter: glowShadowFrom });
+
+                // REVEAL timeline - CHỈ CHẠY 1 LẦN
+                const revealTl = gsap.timeline({ defaults: { ease: "power2.out" } });
+
+                revealTl.fromTo(group, { scale: 1.25 }, { scale: 1, duration: 2.4, ease: "power3.out" }, 0);
+                revealTl.to(paths, { strokeDashoffset: 0, duration: 2.2, stagger: 0.12 }, 0);
+                revealTl.to(paths, { fillOpacity: 1, duration: 1.2, stagger: 0.08 }, 1.2);
+                revealTl.to(paths, { strokeOpacity: 0, duration: 1.2, stagger: 0.08 }, 1.2);
+
+                if (bg) {
+                    revealTl.to(
+                        bg,
+                        {
+                            opacity: bgOpacity,
+                            scale: bgScale,
+                            filter: `blur(${bgBlurPx}px)`,
+                            duration: bgDuration,
+                            ease: "power3.out",
+                        },
+                        `+=${bgDelay}`
+                    );
+
+                    revealTl.add(() => {
+                        startFloat();
+                        startFireworks();
+                        window.addEventListener("resize", onResize);
+                    }, ">");
+                } else {
+                    revealTl.add(() => {
+                        startFloat();
+                        startFireworks();
+                        window.addEventListener("resize", onResize);
+                    }, ">");
+                }
+
+                if (haze && hazeEl) revealTl.to(hazeEl, { opacity: hazeOpacity, duration: 1.2 }, "<");
+                if (bloom && bloomEl) revealTl.to(bloomEl, { opacity: 1, duration: bloomRevealDuration }, "<");
+                if (light && lightEl) revealTl.to(lightEl, { opacity: lightOpacity, duration: lightRevealDuration }, "<");
+
+                revealTl.eventCallback("onComplete", () => {
+                    startLoops();
+                    onDrawComplete?.();
+                });
+            } else {
+                // ĐÃ DRAW RỒI - chỉ setup final state
+                paths.forEach((p) => {
+                    p.style.stroke = "rgba(245,245,245,0.95)";
+                    p.style.fill = "rgba(245,245,245,0.95)";
+                    p.style.strokeDasharray = "none";
+                    p.style.strokeDashoffset = "0";
+                    (p.style as any).fillOpacity = "1";
+                    (p.style as any).strokeOpacity = "0";
+                    p.style.vectorEffect = "non-scaling-stroke";
+                });
+
+                gsap.set(group, { scale: 1 });
+
+                if (bg) {
+                    gsap.set(bg, {
                         opacity: bgOpacity,
                         scale: bgScale,
-                        filter: `blur(${bgBlurPx}px)`,
-                        duration: bgDuration,
-                        ease: "power3.out",
-                    },
-                    `+=${bgDelay}`
-                );
+                        filter: `blur(${bgBlurPx}px)`
+                    });
+                    if (parallax) gsap.set(bg, { backgroundPosition: parallaxFrom });
+                }
+                if (hazeEl) gsap.set(hazeEl, { opacity: hazeOpacity, xPercent: -hazeXPercent });
+                if (bloomEl) gsap.set(bloomEl, { opacity: 1, scale: 1.03 });
+                if (lightEl) gsap.set(lightEl, { opacity: lightOpacity, xPercent: -18, yPercent: 6, rotate: -8, scale: 1.05 });
+                if (glow) gsap.set(svg, { filter: glowShadow });
 
-                revealTl.add(() => {
-                    startFloat();
-                    startFireworks();
-                    window.addEventListener("resize", onResize);
-                }, ">");
-            } else {
-                revealTl.add(() => {
-                    startFloat();
-                    startFireworks();
-                    window.addEventListener("resize", onResize);
-                }, ">");
-            }
-
-            if (haze && hazeEl) revealTl.to(hazeEl, { opacity: hazeOpacity, duration: 1.2 }, "<");
-            if (bloom && bloomEl) revealTl.to(bloomEl, { opacity: 1, duration: bloomRevealDuration }, "<");
-            if (light && lightEl) revealTl.to(lightEl, { opacity: lightOpacity, duration: lightRevealDuration }, "<");
-
-            revealTl.eventCallback("onComplete", () => {
+                // Start loops ngay lập tức
+                startFloat();
+                startFireworks();
                 startLoops();
-                onDrawComplete?.();
-            });
+                window.addEventListener("resize", onResize);
 
+                onDrawComplete?.();
+            }
 
             return () => {
                 window.removeEventListener("resize", onResize);
-
                 stopFireworks();
-
                 floatLoop?.kill();
                 loops.forEach((a) => a.kill());
-                revealTl.kill();
             };
         }, wrap);
 
@@ -561,51 +618,45 @@ export default function MemMaiDraw({
         svgMarkup,
         svgStyle,
         preserveAspectRatio,
-
         stageSelector,
         bgSelector,
         hazeSelector,
         bloomSelector,
         lightSelector,
-
         bgOpacity,
         bgScale,
         bgBlurPx,
         bgDuration,
         bgDelay,
-
         glow,
         glowDuration,
         glowShadow,
         glowShadowFrom,
-
         parallax,
         parallaxDuration,
         parallaxFrom,
         parallaxTo,
-
         haze,
         hazeDuration,
         hazeXPercent,
         hazeOpacity,
-
         bloom,
         bloomRevealDuration,
         bloomBreathDuration,
         bloomOpacity,
-
         light,
         lightRevealDuration,
         lightOpacity,
         lightDuration,
-
         floatText,
         floatDistancePx,
         floatDuration,
-
         fireworks,
+        isFireworksEnable,
         fireworksRateMs,
         fireworksParticles,
+        animateBg,
+        onDrawComplete,
     ]);
 
     if (error) {

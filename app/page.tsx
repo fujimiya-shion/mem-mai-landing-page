@@ -55,6 +55,7 @@ export default function Page() {
             <div className="mm-content">
                 {!showIntro && (
                     <MemMaiDraw
+                        isFireworksEnable={theme === 'dark'}
                         animateBg
                         onDrawComplete={() => setDrawDone(true)}
                     />
